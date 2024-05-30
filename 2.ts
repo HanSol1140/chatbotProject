@@ -208,7 +208,8 @@ function parseOrder(inputText: string) {
     }
 }
 
-console.log(parseOrder("아메리카노"));
-console.log(parseOrder("아메리카노 아이스 볜티사이즈 카라멜시럽추가 바닐라드리즐추가 해주세요"));
+
+// 최대주문
+console.log(parseOrder("아메리카노 아이스 볜티사이즈 농도 25%카라멜시럽추가 바닐라드리즐추가, 헤이즐넛드리즐, "));
 console.log(parseOrder("아이스 아메리카노 벤티사이즈로 줘"));
 console.log(parseOrder("쌍화차 벤티사이즈"));
