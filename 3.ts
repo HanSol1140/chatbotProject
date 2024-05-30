@@ -207,6 +207,19 @@ function generateOptionCode(options: { [key: string]: any }) {
 }
 
 /**
+ * 키워드의 인덱스를 반환합니다.
+ * 
+ * @param keyword - 키워드 문자열.
+ * @param keywords - 키워드 객체.
+ * @returns 키워드의 인덱스 (0 기반).
+ */
+function getKeywordIndex(keyword: string | null, keywords: { [key: string]: string[] }) {
+    if (!keyword) return 0; // 키워드가 없는 경우 0을 반환 (기본값)
+    const keys = Object.keys(keywords);
+    const index = keys.indexOf(keyword);
+    return index >= 0 ? index + 1 : 0; // 1 기반 인덱스를 반환
+}
+/**
  * 주문 입력 텍스트를 분석하여 미리 정의된 키워드에서 메뉴 항목, 온도, 사이즈 및 시럽을 식별합니다.
  * 주문을 성공적으로 분석한 경우 주문 확인 문자열을 구성하여 반환하며, 그렇지 않으면 오류 메시지를 반환합니다.
  *
@@ -229,8 +242,8 @@ function parseOrder(inputText: string) {
 
     // 양 관련 키워드를 먼저 처리하여 시럽/드리즐 양에 반영
     let currentAmount: string | null = null;
-    let isSyrupDetected = false;
-    let isDrizzleDetected = false;
+    let isSyrupNext = false;
+    let isDrizzleNext = false;
 
     for (const word of words) {
         if (!currentAmount) {
@@ -252,31 +265,24 @@ function parseOrder(inputText: string) {
         if (!matchedKeywords.syrup) {
             matchedKeywords.syrup = findBestMatch(word, syrupKeywords);
             if (matchedKeywords.syrup) {
-                isSyrupDetected = true;
-                if (currentAmount) {
-                    matchedKeywords.syrupAmount = currentAmount;
-                    currentAmount = null;
-                }
+                isSyrupNext = true;
             }
-        } else if (isSyrupDetected && currentAmount) {
-            matchedKeywords.syrupAmount = currentAmount;
-            currentAmount = null;
-            isSyrupDetected = false;
         }
-
         if (!matchedKeywords.drizzle) {
             matchedKeywords.drizzle = findBestMatch(word, drizzleKeywords);
             if (matchedKeywords.drizzle) {
-                isDrizzleDetected = true;
-                if (currentAmount) {
-                    matchedKeywords.drizzleAmount = currentAmount;
-                    currentAmount = null;
-                }
+                isDrizzleNext = true;
             }
-        } else if (isDrizzleDetected && currentAmount) {
+        }
+
+        if (isSyrupNext && currentAmount) {
+            matchedKeywords.syrupAmount = currentAmount;
+            currentAmount = null;
+            isSyrupNext = false;
+        } else if (isDrizzleNext && currentAmount) {
             matchedKeywords.drizzleAmount = currentAmount;
             currentAmount = null;
-            isDrizzleDetected = false;
+            isDrizzleNext = false;
         }
     }
 
@@ -297,21 +303,21 @@ function parseOrder(inputText: string) {
     if (matchedKeywords.menu) { // 메뉴만 필수
         let order = `${matchedKeywords.temperature} ${matchedKeywords.menu} ${matchedKeywords.size}사이즈`;
         if (matchedKeywords.syrup) {
-            order += `, ${matchedKeywords.syrup} (${matchedKeywords.syrupAmount}) 추가`;
+            order += `, ${matchedKeywords.syrup} ${matchedKeywords.syrupAmount} 추가`;
         }
         if (matchedKeywords.drizzle) {
-            order += `, ${matchedKeywords.drizzle} (${matchedKeywords.drizzleAmount}) 추가`;
+            order += `, ${matchedKeywords.drizzle} ${matchedKeywords.drizzleAmount} 추가`;
         }
 
         const optionCode = generateOptionCode({
-            menu: matchedKeywords.menu === '아메리카노' ? '101' : '102', // 예시로 아메리카노와 카페라떼만 처리
-            temperature: matchedKeywords.temperature === '핫' ? '1' : '2',
-            size: matchedKeywords.size === '톨' ? '1' : matchedKeywords.size === '그란데' ? '2' : '3',
-            coffeeBean: matchedKeywords.coffeeBean ? (matchedKeywords.coffeeBean === '마일드로스트' ? '1' : '2') : '1',
-            syrup: matchedKeywords.syrup ? '1' : '0',
-            syrupAmount: matchedKeywords.syrupAmount === '적게' ? '1' : matchedKeywords.syrupAmount === '많이' ? '3' : '2',
-            drizzle: matchedKeywords.drizzle ? '1' : '0',
-            drizzleAmount: matchedKeywords.drizzleAmount === '적게' ? '1' : matchedKeywords.drizzleAmount === '많이' ? '3' : '2'
+            menu: getKeywordIndex(matchedKeywords.menu, menuKeywords).toString().padStart(3, '0'),
+            temperature: getKeywordIndex(matchedKeywords.temperature, temperatureKeywords).toString(),
+            size: getKeywordIndex(matchedKeywords.size, sizeKeywords).toString(),
+            coffeeBean: getKeywordIndex(matchedKeywords.coffeeBean, coffeeBeanKeywords).toString(),
+            syrup: getKeywordIndex(matchedKeywords.syrup, syrupKeywords).toString(),
+            syrupAmount: getKeywordIndex(matchedKeywords.syrupAmount, amountKeywords).toString(),
+            drizzle: getKeywordIndex(matchedKeywords.drizzle, drizzleKeywords).toString(),
+            drizzleAmount: getKeywordIndex(matchedKeywords.drizzleAmount, amountKeywords).toString()
         });
 
         return `${order} 주문받았습니다.\n옵션 코드: ${optionCode}`;
@@ -321,8 +327,9 @@ function parseOrder(inputText: string) {
 }
 
 console.log(parseOrder("아메리카노 아이스 벤티사이즈 바닐라시럽 많이 추가해줘"));
-console.log(parseOrder("아이스 아메리카노 벤티사이즈로 줘"));
+console.log(parseOrder("아이스 아메리카노 팬티사이즈로 줘"));
 console.log(parseOrder("아메리카노"));
 console.log(parseOrder("아메리카노 바닐라시럽 추가해줘"));
 console.log(parseOrder("아메리카노 바닐라시럽 적게 추가해줘"));
-console.log(parseOrder("아메리카노 바닐라시럽 적게 추가해줘 카라멜드리즐 보통 추가해줘"));
+console.log(parseOrder("아메리카노 바닐라시럽 많이 추가해줘 카라멜드리즐 보통 추가해줘"));
+
