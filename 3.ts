@@ -97,6 +97,7 @@ function compareTwoStrings(string1: string, string2: string) {
 
 const menuKeywords = {
     "아메리카노": ["아메리카노", "아멜카노"],
+    "디카페인 아메리카노": ["디카페인아메리카노", "아멜카노"],
     "카페라떼": ["카페라떼"],
     "카푸치노": ["카푸치노"],
     "카페오레": ["카페오레"],
@@ -326,8 +327,8 @@ function parseOrder(inputText: string) {
     }
 }
 
-console.log(parseOrder("아메리카노 아이스 벤티사이즈 바닐라시럽 많이 추가해줘"));
-console.log(parseOrder("아이스 아메리카노 팬티사이즈로 줘"));
+console.log(parseOrder("아메리카노 아이스 벤티사이즈 바닐라시럽 많이 카라멜드리즐 보통 추가해줘"));
+console.log(parseOrder("아이스 디카페인 아메리카노 팬티사이즈로 줘"));
 console.log(parseOrder("아메리카노"));
 console.log(parseOrder("아메리카노 바닐라시럽 추가해줘"));
 console.log(parseOrder("아메리카노 바닐라시럽 적게 추가해줘"));

@@ -137,26 +137,7 @@ function compareTwoStrings(string1: string, string2: string) {
     return (maxLen - distance) / maxLen;
 }
 
-/**
- * 입력 문자열과 키워드 세트에서 최적의 매칭을 찾습니다.
- * 최적의 매칭은 가장 높은 유사도 점수를 가진 키워드입니다.
- *
- * @param input - 입력 문자열.
- * @param keywords - 키워드 변형 배열을 값으로 갖는 객체.
- * @returns 유사도가 임계값을 초과하는 경우 최적의 매칭 키워드, 그렇지 않으면 null.
- */
-function findBestMatch(input: string, keywords: { [key: string]: { variations: string[], stock: number | null } }) {
-    let bestMatch = { key: "", similarity: 0 };
-    for (const key in keywords) {
-        for (const keyword of keywords[key].variations) {
-            const similarity = compareTwoStrings(input, keyword);
-            if (similarity > bestMatch.similarity) {
-                bestMatch = { key, similarity };
-            }
-        }
-    }
-    return bestMatch.similarity > 0.7 ? bestMatch.key : null;
-}
+
 
 /**
  * 옵션 코드를 생성합니다.
@@ -174,13 +155,10 @@ function generateOptionCode(options: { [key: string]: any }) {
         syrup,
         syrupAmount,
         drizzle,
-        // 기본값 추가
         caffeineLevel = "015", // 15%
         decafLevel = "000", // 0%
         powder = "0",
-        powderAmount = "0",
-        whippingCream = "0",
-        whippingCreamAmount = "0",
+        whippingCreamAmount = "0", // 휘핑크림 양만 표시
         milk = "0",
         milkAmount = "0",
         topping = "0",
@@ -189,10 +167,15 @@ function generateOptionCode(options: { [key: string]: any }) {
 
     // 시럽이 선택되지 않은 경우 시럽 양을 0으로 설정
     const finalSyrupAmount = syrup === "0" ? "0" : syrupAmount;
+    // 휘핑크림이 선택되지 않은 경우 휘핑크림 양을 0으로 설정
+    const finalWhippingCreamAmount = options.whippingCreamAmount === "0" ? "0" : whippingCreamAmount;
+    // 우유가 선택되지 않은 경우 우유 양을 0으로 설정
+    const finalMilkAmount = milk === "0" ? "0" : milkAmount;
 
-    // 옵션 코드를 생성하여 반환
-    return `${menu}-${temperature}-${size}-${coffeeBean}-${caffeineLevel}-${decafLevel}-${syrup}${finalSyrupAmount}-${drizzle}-${powder}${powderAmount}-${whippingCream}${whippingCreamAmount}-${milk}${milkAmount}-${topping}-${quantity}`;
+    // 옵션 코드를 생성하여 반환 (휘핑크림은 양만, 드리즐은 단일 코드로)
+    return `${menu}-${temperature}-${size}-${coffeeBean}-${caffeineLevel}-${decafLevel}-${syrup}${finalSyrupAmount}-${drizzle}-${powder}-${finalWhippingCreamAmount}-${milk}${finalMilkAmount}-${topping}-${quantity}`;
 }
+
 
 /**
  * 키워드의 인덱스를 반환합니다.
@@ -208,6 +191,35 @@ function getKeywordIndex(keyword: string | null, keywords: { [key: string]: { va
     return index >= 0 ? index + 1 : 0; // 1 기반 인덱스를 반환
 }
 
+
+
+
+/**
+ * 입력 문자열과 키워드 세트에서 최적의 매칭을 찾습니다.
+ * 최적의 매칭은 가장 높은 유사도 점수를 가진 키워드입니다.
+ *
+ * @param inputWord - 입력 문자열.
+ * @param keywords - 키워드 변형 배열을 값으로 갖는 객체.
+ * @returns 유사도가 임계값을 초과하는 경우 최적의 매칭 키워드, 그렇지 않으면 null.
+ */
+const priorityMatch = (inputWord: any, keywords: any) => {
+    let bestMatch: any = null;
+    let highestSimilarity = 0;
+    for (const key in keywords) {
+        if (inputWord === key) {
+            return key;
+        }
+        for (const variation of keywords[key].variations) {
+            const similarity = compareTwoStrings(inputWord, variation);
+            if (similarity > highestSimilarity) {
+                highestSimilarity = similarity;
+                bestMatch = key;
+            }
+        }
+    }
+    return highestSimilarity >= 0.7 ? bestMatch : null;
+};
+
 /**
  * 주문 입력 텍스트를 분석하여 미리 정의된 키워드에서 메뉴 항목, 온도, 사이즈 및 시럽을 식별합니다.
  * 주문을 성공적으로 분석한 경우 주문 확인 문자열을 구성하여 반환하며, 그렇지 않으면 오류 메시지를 반환합니다.
@@ -222,83 +234,86 @@ function parseOrder(inputText: string) {
         size: null,
         coffeeBean: null,
         syrup: null,
-        syrupAmount: null,
+        syrupAmount: "보통", // 기본값 설정
         powder: null,
         drizzle: null,
-        caffeinLevel: null,
-        quantity: null,
+        caffeinLevel: "15%", // 기본값 설정 (15%)
+        quantity: "1개", // 기본값 설정
         whippingCream: null,
-        whippingCreamAmount: null,
+        whippingCreamAmount: "0", // 기본값 0으로 설정 (사용 안 함)
         milk: null,
-        milkAmount: null,
+        milkAmount: "0", // 기본값 0으로 설정
         topping: null,
     };
 
     const words = inputText.split(/\s+/);
 
-    // 양 관련 키워드를 먼저 처리하여 시럽/드리즐/휘핑크림 양에 반영
-    let currentAmount: string | null = null;
+    let currentAmount: any = null;
     let isSyrupNext = false;
     let isDrizzleNext = false;
     let isWhippingCreamNext = false;
+    let isMilkNext = false;
 
     for (const word of words) {
         if (!currentAmount) {
-            currentAmount = findBestMatch(word, amountKeywords);
+            currentAmount = priorityMatch(word, amountKeywords);
         }
 
-        const menuMatch = findBestMatch(word, menuKeywords);
+        const menuMatch = priorityMatch(word, menuKeywords);
         if (menuMatch) {
             matchedKeywords.menu = menuMatch;
         }
 
-        const temperatureMatch = findBestMatch(word, temperatureKeywords);
+        const temperatureMatch = priorityMatch(word, temperatureKeywords);
         if (temperatureMatch) {
             matchedKeywords.temperature = temperatureMatch;
         }
 
-        const sizeMatch = findBestMatch(word, sizeKeywords);
+        const sizeMatch = priorityMatch(word, sizeKeywords);
         if (sizeMatch) {
             matchedKeywords.size = sizeMatch;
         }
 
-        const coffeeBeanMatch = findBestMatch(word, coffeeBeanKeywords);
+        const coffeeBeanMatch = priorityMatch(word, coffeeBeanKeywords);
         if (coffeeBeanMatch) {
             matchedKeywords.coffeeBean = coffeeBeanMatch;
         }
-        const caffeinLevelMatch = findBestMatch(word, caffeinLevelKeywords);
+
+        const caffeinLevelMatch = priorityMatch(word, caffeinLevelKeywords);
         if (caffeinLevelMatch) {
             matchedKeywords.caffeinLevel = caffeinLevelMatch;
         }
 
-        const syrupMatch = findBestMatch(word, syrupKeywords);
+        const syrupMatch = priorityMatch(word, syrupKeywords);
         if (syrupMatch) {
             matchedKeywords.syrup = syrupMatch;
             isSyrupNext = true;
         }
-        const powderMatch = findBestMatch(word, powderKeywords);
+
+        const powderMatch = priorityMatch(word, powderKeywords);
         if (powderMatch) {
             matchedKeywords.powder = powderMatch;
         }
 
-        const drizzleMatch = findBestMatch(word, drizzleKeywords);
+        const drizzleMatch = priorityMatch(word, drizzleKeywords);
         if (drizzleMatch) {
             matchedKeywords.drizzle = drizzleMatch;
             isDrizzleNext = true;
         }
 
-        const whippingCreamMatch = findBestMatch(word, whippingCreamKeywords);
+        const whippingCreamMatch = priorityMatch(word, whippingCreamKeywords);
         if (whippingCreamMatch) {
             matchedKeywords.whippingCream = whippingCreamMatch;
             isWhippingCreamNext = true;
         }
 
-        const milkMatch = findBestMatch(word, milkKeywords);
+        const milkMatch = priorityMatch(word, milkKeywords);
         if (milkMatch) {
             matchedKeywords.milk = milkMatch;
+            isMilkNext = true;
         }
 
-        const toppingMatch = findBestMatch(word, toppingKeywords);
+        const toppingMatch = priorityMatch(word, toppingKeywords);
         if (toppingMatch) {
             matchedKeywords.topping = toppingMatch;
         }
@@ -315,27 +330,33 @@ function parseOrder(inputText: string) {
             isWhippingCreamNext = false;
         }
 
-        const quantityMatch = findBestMatch(word, quantityKeywords);
+        if (isMilkNext && currentAmount) {
+            matchedKeywords.milkAmount = currentAmount;
+            currentAmount = null;
+            isMilkNext = false;
+        }
+
+        const quantityMatch = priorityMatch(word, quantityKeywords);
         if (quantityMatch) {
             matchedKeywords.quantity = quantityMatch;
         }
     }
 
-    // 기본값 설정
+    // 기본값 설정 보완
+    matchedKeywords.milkAmount = matchedKeywords.milk ? matchedKeywords.milkAmount : "0";
+    matchedKeywords.syrupAmount = matchedKeywords.syrupAmount || "보통";
+    matchedKeywords.whippingCreamAmount = matchedKeywords.whippingCream ? matchedKeywords.whippingCreamAmount : "0";
+    matchedKeywords.caffeinLevel = matchedKeywords.caffeinLevel || "15%";
+    matchedKeywords.quantity = matchedKeywords.quantity || "1개";
+
     if (!matchedKeywords.temperature) {
         matchedKeywords.temperature = "아이스";
     }
     if (!matchedKeywords.size) {
         matchedKeywords.size = "벤티";
     }
-    if (!matchedKeywords.syrupAmount) {
-        matchedKeywords.syrupAmount = "보통";
-    }
-    if (!matchedKeywords.whippingCreamAmount) {
-        matchedKeywords.whippingCreamAmount = "보통";
-    }
 
-    if (matchedKeywords.menu) { // 메뉴만 필수
+    if (matchedKeywords.menu) {
         const menuStock = menuKeywords[matchedKeywords.menu]?.stock;
         if (menuStock !== null && menuStock <= 0) {
             return `${matchedKeywords.menu}의 재고가 부족합니다.`;
@@ -344,10 +365,15 @@ function parseOrder(inputText: string) {
         let order = `${matchedKeywords.temperature} ${matchedKeywords.menu} ${matchedKeywords.size}사이즈`;
 
         if (matchedKeywords.coffeeBean) {
+            const coffeeBeanStock = coffeeBeanKeywords[matchedKeywords.coffeeBean]?.stock;
+            if (coffeeBeanStock !== null && coffeeBeanStock <= 0) {
+                return `${matchedKeywords.coffeeBean} 원두의 재고가 부족합니다.`;
+            }
             order += `, ${matchedKeywords.coffeeBean} 원두 사용`;
         }
-        if(matchedKeywords.caffeinLevel){
-            order += `, 카페인 함량 ${matchedKeywords.caffeinLevel}`;
+
+        if (matchedKeywords.caffeinLevel) {
+            order += `, 카페인 함량 ${caffeinLevelKeywords[matchedKeywords.caffeinLevel]?.variations[0] || matchedKeywords.caffeinLevel}`;
         }
         if (matchedKeywords.syrup) {
             const syrupStock = syrupKeywords[matchedKeywords.syrup]?.stock;
@@ -356,7 +382,7 @@ function parseOrder(inputText: string) {
             }
             order += `, ${matchedKeywords.syrup} ${matchedKeywords.syrupAmount} 추가`;
         }
-        if(matchedKeywords.powder){
+        if (matchedKeywords.powder) {
             const powderStock = powderKeywords[matchedKeywords.powder]?.stock;
             if (powderStock !== null && powderStock <= 0) {
                 return `${matchedKeywords.powder}의 재고가 부족합니다.`;
@@ -370,28 +396,28 @@ function parseOrder(inputText: string) {
             }
             order += ` ${matchedKeywords.drizzle} 추가`;
         }
-        if(matchedKeywords.whippingCream){
+        if (matchedKeywords.whippingCream) {
             const whippingCreamStock = whippingCreamKeywords[matchedKeywords.whippingCream]?.stock;
             if (whippingCreamStock !== null && whippingCreamStock <= 0) {
                 return `${matchedKeywords.whippingCream}의 재고가 부족합니다.`;
             }
-            order += `, ${matchedKeywords.whippingCream} ${matchedKeywords.whippingCreamAmount} 추가`;
+            order += `, 휘핑크림 ${matchedKeywords.whippingCreamAmount} 추가`;
         }
-        if(matchedKeywords.milk){
+        if (matchedKeywords.milk) {
             const milkStock = milkKeywords[matchedKeywords.milk]?.stock;
             if (milkStock !== null && milkStock <= 0) {
                 return `${matchedKeywords.milk}의 재고가 부족합니다.`;
             }
             order += `, ${matchedKeywords.milk} ${matchedKeywords.milkAmount} 추가`;
         }
-        if(matchedKeywords.topping){
+        if (matchedKeywords.topping) {
             const toppingStock = toppingKeywords[matchedKeywords.topping]?.stock;
             if (toppingStock !== null && toppingStock <= 0) {
                 return `${matchedKeywords.topping}의 재고가 부족합니다.`;
             }
             order += `, ${matchedKeywords.topping} 추가`;
         }
-        if(matchedKeywords.quantity){
+        if (matchedKeywords.quantity) {
             order += `, ${matchedKeywords.quantity}`;
         }
 
@@ -405,13 +431,13 @@ function parseOrder(inputText: string) {
             syrupAmount: getKeywordIndex(matchedKeywords.syrupAmount, amountKeywords).toString(),
             drizzle: getKeywordIndex(matchedKeywords.drizzle, drizzleKeywords).toString(),
             powder: getKeywordIndex(matchedKeywords.powder, powderKeywords).toString(),
-            whippingCream: getKeywordIndex(matchedKeywords.whippingCream, whippingCreamKeywords).toString(),
             whippingCreamAmount: getKeywordIndex(matchedKeywords.whippingCreamAmount, amountKeywords).toString(),
             milk: getKeywordIndex(matchedKeywords.milk, milkKeywords).toString(),
             milkAmount: getKeywordIndex(matchedKeywords.milkAmount, amountKeywords).toString(),
             topping: getKeywordIndex(matchedKeywords.topping, toppingKeywords).toString(),
             quantity: getKeywordIndex(matchedKeywords.quantity, quantityKeywords).toString(),
         });
+
         return `${order} 주문받았습니다.\n옵션 코드: ${optionCode}`;
     } else {
         return "죄송합니다. 주문을 이해하지 못했습니다.";
@@ -419,5 +445,7 @@ function parseOrder(inputText: string) {
 }
 
 // 테스트 주문
-console.log(parseOrder("아이스 아메리카노 벤티 사이즈 농도 25% 바닐라시럽 적게 초코파우더 추가 카라멜드리즐 추가 마일드로스트 휘핑크림 많이 오트밀우유 추가 쿠키 추가 3잔"));
-console.log(parseOrder("뜨거운 카페라떼 톨  농도 15% 카라멜시럽 보통 바닐라파우더 추가 모카드리즐 추가 다크로스트 휘핑크림 적게 일반우유 추가 오레오 추가 2잔"));
+console.log(parseOrder("아메리카노"));
+console.log(parseOrder("아이스 아메리카노 아라비카원두에 농도는 20% 맞춰주고 바닐라시럽 적게 바닐라 드리즐, 바닐라 파우더, 휘핑크림 보통에 오트밀우유 많이 추가, 토핑은 쿠키로 2잔 줘"));
+console.log(parseOrder("아메리카노 바닐라시럽 많이 오트밀우유 적게 줘"));
+console.log(parseOrder("아메리카노 바닐라시럽 보통 오트밀우유 많이 줘"));
